@@ -1,0 +1,149 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Cmentarze Warszawa</title>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <style>
+        html, body, #map {
+            width: 100%;
+            height: 100%;
+            padding: 0;
+            margin: 0;
+        }
+    </style>
+
+    <link rel="icon" type="image/x-icon" href="ikona.ico" />
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+
+    <link rel="stylesheet" href="https://unpkg.com/leaflet.markercluster@1.5.3/dist/MarkerCluster.css" />
+    <link rel="stylesheet" href="https://unpkg.com/leaflet.markercluster@1.5.3/dist/MarkerCluster.Default.css" />
+    <script src="https://unpkg.com/leaflet.markercluster@1.5.3/dist/leaflet.markercluster.js"></script>
+</head>
+
+<body>
+    <div id="map"></div>
+
+    <script src="cmentarze.js"></script> 
+
+    <script>
+        var map = L.map('map').setView([52.23, 21.01], 11);
+
+        map.attributionControl.setPrefix(
+            '<a href="https://leafletjs.com">Leaflet</a> | Geoportal Cmentarzy Warszawskich'
+        );
+
+        var osm = L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+            attribution: '&copy; OpenStreetMap contributors'
+        });
+
+        var orto = L.tileLayer.wms('https://mapy.geoportal.gov.pl/wss/service/PZGIK/ORTO/WMS/StandardResolution', {
+            layers: 'Raster',
+            format: 'image/png',
+            transparent: true,
+            attribution: "Geoportal.gov.pl"
+        });
+
+        osm.addTo(map);
+
+        // Funkcja pomocnicza do pobierania religii/odłamu
+        function getReligionOrDenomination(feature) {
+            var religion = feature.properties.religion || "";
+            var denomination = feature.properties.denomination || "";
+            return (religion + " " + denomination).toLowerCase();
+        }
+
+        function getColor(r) {
+            if (!r) return '#000000'; 
+            if (r.includes('catholic') || r.includes('katoli')) return '#FFD700'; 
+            if (r.includes('jewish') || r.includes('żydow')) return '#1E90FF'; 
+            if (r.includes('orthodox') || r.includes('prawosł')) return '#9932CC'; 
+            if (r.includes('muslim') || r.includes('muzuł')) return '#008000'; 
+            if (r.includes('lutheran') || r.includes('ewange') || r.includes('reformed')) return '#FFA500'; 
+            return '#000000'; 
+        }
+
+        function PToL(feature, latlng) {
+            var fullData = getReligionOrDenomination(feature);
+
+            var style = {
+                radius: 8, // Zwiększyłem trochę kropkę żeby była widoczna
+                opacity: 1, 
+                color: '#fff', 
+                weight: 1, 
+                fill: true, 
+                fillOpacity: 0.8, 
+                fillColor: getColor(fullData)
+            };
+
+            return L.circleMarker(latlng, style);
+        }
+
+        function oEF(feature, layer) {
+            var props = feature.properties;
+            
+            layer.bindTooltip(props.name || "Bez nazwy", {
+                permanent: false, 
+                direction: 'top'
+            });
+
+            var opis = "Religia: " + (props.religion || "-") + "<br>Odłam: " + (props.denomination || "-");
+            layer.bindPopup("<b>" + (props.name || "Bez nazwy") + "</b><br>" + opis);
+        }
+
+        function stworzWarstwe(szukanaFraza) {
+            // TUTAJ WAŻNE: Odwołujemy się do zmiennej 'cmentarze' z Twojego pliku .js
+            var warstwa = L.geoJSON(cmentarze, {
+                filter: function(feature) {
+                    var fullData = getReligionOrDenomination(feature);
+                    if (szukanaFraza === 'inne') {
+                        return !fullData.includes('catholic') && !fullData.includes('jewish') && 
+                               !fullData.includes('orthodox') && !fullData.includes('muslim') && 
+                               !fullData.includes('lutheran') && !fullData.includes('reformed');
+                    }
+                    return fullData.includes(szukanaFraza);
+                },
+                onEachFeature: oEF,
+                pointToLayer: PToL
+            });
+            
+            var klaster = L.markerClusterGroup();
+            klaster.addLayer(warstwa);
+            return klaster;
+        }
+
+        var layerKatolickie = stworzWarstwe("catholic");
+        var layerZydowskie = stworzWarstwe("jewish");
+        var layerPrawoslawne = stworzWarstwe("orthodox");
+        var layerEwangelickie = stworzWarstwe("lutheran");
+        var layerMuzulmanskie = stworzWarstwe("muslim");
+        var layerInne = stworzWarstwe("inne");
+
+        map.addLayer(layerKatolickie);
+        map.addLayer(layerZydowskie);
+        map.addLayer(layerPrawoslawne);
+        map.addLayer(layerEwangelickie);
+        map.addLayer(layerMuzulmanskie);
+        map.addLayer(layerInne);
+
+        var baseLayers = {
+            "Mapa OSM": osm,
+            "Zdjęcia lotnicze (WMS)": orto
+        };
+
+        var overlays = {
+            "<span style='color:#FFD700'>■</span> Katolickie": layerKatolickie,
+            "<span style='color:#1E90FF'>■</span> Żydowskie": layerZydowskie,
+            "<span style='color:#9932CC'>■</span> Prawosławne": layerPrawoslawne,
+            "<span style='color:#FFA500'>■</span> Ewangelickie": layerEwangelickie,
+            "<span style='color:#008000'>■</span> Muzułmańskie": layerMuzulmanskie,
+            "<span style='color:#000000'>■</span> Komunalne / Inne": layerInne
+        };
+
+        L.control.layers(baseLayers, overlays, {collapsed: false}).addTo(map);
+        L.control.scale().addTo(map);
+
+    </script>
+</body>
+</html>
